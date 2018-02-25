@@ -9,6 +9,7 @@ import torch.nn.functional as functional
 import torch.optim as optim
 from torch.autograd import Variable
 import pdb
+import pandas as pd
 
 class CellDataset(Dataset):
     def __init__(self, X, Y, transform=None):
@@ -21,6 +22,22 @@ class CellDataset(Dataset):
 
     def __getitem__(self, idx): 
         sample = {'image': self.X[idx,:,:,:], 'label': self.Y[idx]}
+        
+        if self.transform:
+            sample['image'] = self.transform(sample['image'])
+
+        return sample
+
+class CellTestDataset(Dataset):
+    def __init__(self, X, transform=None):
+        self.X = X
+        self.transform = transform
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx): 
+        sample = {'image': self.X[idx,:,:,:]}
         
         if self.transform:
             sample['image'] = self.transform(sample['image'])
@@ -126,6 +143,60 @@ def main(hp):
         print('testAccuracy : %d %%' % (100 * correct / total))
         print('bestTestAccuracy : %d %%' % best_test_acc)
 
+def test(hp):
+    # X, Y = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
+    testX, testY = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
+    realTestX = np.expand_dims(np.load('X_test.npy'), 3)
+    transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.ToTensor()])
+
+    # testset = CellDataset(X[:hp['num_test_images'],:,:,:], Y[:hp['num_test_images']], transform)
+    testset = CellDataset(testX, testY, transform)
+    testset_loader = DataLoader(testset, batch_size=hp['batch_size'], shuffle=True)
+    realTestset = CellTestDataset(realTestX, transform)
+    real_testset_loader = DataLoader(realTestset, batch_size=hp['batch_size'], shuffle=False)
+
+    net = Net()
+    net.cuda()
+    net.load_state_dict(torch.load("model.pt"))
+    dtype = torch.cuda.FloatTensor
+
+    correct = 0
+    total = 0
+    output_data = {"Class":[]}
+    for i, data in enumerate(testset_loader):
+        inputs, labels = data['image'], data['label']
+        # wrap them in Variable
+        inputs, labels = Variable(inputs).type(dtype), Variable(labels).type(torch.cuda.LongTensor)
+
+        # forward + backward + optimize
+        outputs = net(inputs)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += torch.eq(predicted, labels.data).sum()
+    
+    print('testAccuracy : %d %%' % (100 * correct / total))
+
+    correct = 0
+    total = 0
+    for i, data in enumerate(real_testset_loader):
+        inputs = data['image']
+        # wrap them in Variable
+        inputs= Variable(inputs).type(dtype)
+
+        # forward + backward + optimize
+        outputs = net(inputs)
+        _, predicted = torch.max(outputs.data, 1)
+        for j in range(predicted.size(0)):
+            output_data['Class'].append(int(predicted[j]))
+
+    # for i in range(len(testY)):
+    #     correct += int(testY[i]==output_data['Class'][i])
+    #     total += 1
+
+    # print('realTestAccuracy : %d %%' % (100 * correct / total))
+    df = pd.DataFrame(output_data, columns=["Class"])
+    df.to_csv('test_prediction.csv')
+
 if __name__ == "__main__":
     hyperparameters = {
         "num_epoch":200,
@@ -134,4 +205,5 @@ if __name__ == "__main__":
         "learning_rate":0.0001,
         "print_every":10,
     }
-    main(hyperparameters)
+    test(hyperparameters)
+    # main(hyperparameters)
