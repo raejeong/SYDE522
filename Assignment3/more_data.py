@@ -20,10 +20,10 @@ def main():
 
     for i in range(20):
         newY = Ys[i][0]
-        for j in range(10):
-            newX = np.zeros([150,150]).reshape((150,150,1))
-            for kx in range(3):
-                for ky in range(3):
+        for j in range(4000):
+            newX = np.zeros([200,200]).reshape((200,200,1))
+            for kx in range(4):
+                for ky in range(4):
                     idx = np.random.randint(Xs[i].shape[0])
                     currentX = Xs[i][idx,:,:,:]
                     h, w = currentX.shape[:2]
