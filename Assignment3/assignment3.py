@@ -24,7 +24,6 @@ class CellDataset(Dataset):
         sample = {'image': self.X[idx,:,:,:], 'label': self.Y[idx]}
         
         if self.transform:
-            pdb.set_trace()
             sample['image'] = self.transform(sample['image'])
 
         return sample
@@ -56,23 +55,53 @@ class CellTestDataset(Dataset):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 4, 17, padding=8)
-        self.pool = nn.MaxPool2d((2,2))
-        self.batchnorm1 = nn.BatchNorm2d(5)
-        self.conv2 = nn.Conv2d(5, 8, 17, padding=8)
-        self.batchnorm2 = nn.BatchNorm2d(13)
-        self.conv3 = nn.Conv2d(13, 13, 9, padding=4)
-        self.batchnorm3 = nn.BatchNorm2d(26)
-        self.conv4 = nn.Conv2d(15, 15, 9, padding=4)
-        self.batchnorm4 = nn.BatchNorm2d(30)
-        self.fc1 = nn.Linear(int(269568/32), 64)
+        self.batchnorm0 = nn.BatchNorm2d(1)
+
+        self.conv1 = nn.Conv2d(1, 4, 5)
+        self.padding1 = nn.ConstantPad2d(-2, 0)
+        self.batchnorm1 = nn.BatchNorm2d(4)
+
+        self.conv2 = nn.Conv2d(4, 8, 5)
+        self.padding2 = nn.ConstantPad2d(-2, 0)
+        self.batchnorm2 = nn.BatchNorm2d(8)
+
+        self.conv3 = nn.Conv2d(8, 16, 5)
+        self.padding3 = nn.ConstantPad2d(-2, 0)
+        self.batchnorm3 = nn.BatchNorm2d(16)
+
+        self.conv4 = nn.Conv2d(16, 32, 5, stride=2)
+        self.padding4 = nn.ConstantPad2d(-1, 0)
+        self.batchnorm4 = nn.BatchNorm2d(32)
+
+        self.conv5 = nn.Conv2d(32, 64, 5, stride=2)
+        self.padding5 = nn.ConstantPad2d(-1, 0)
+        self.batchnorm5 = nn.BatchNorm2d(64)
+
+        self.conv6 = nn.Conv2d(64, 128, 5, stride=2)
+        self.padding6 = nn.ConstantPad2d(-1, 0)
+        self.batchnorm6 = nn.BatchNorm2d(128)
+
+        self.conv7 = nn.Conv2d(128, 128, 5, stride=2)
+        self.padding7 = nn.ConstantPad2d(-1, 0)
+        self.batchnorm7 = nn.BatchNorm2d(128)
+
+        self.fc1 = nn.Linear(int(96000/30), 64)
         self.fc2 = nn.Linear(64, 20)
 
+        self.pool = nn.MaxPool2d(2, 2)
+
     def forward(self, x):
-        x = functional.relu(self.batchnorm1(self.pool(torch.cat((self.conv1(x),x),1))))
-        x = functional.relu(self.batchnorm2(self.pool(torch.cat((self.conv2(x),x),1))))
-        x = functional.relu(self.batchnorm3(self.pool(torch.cat((self.conv3(x),x),1))))
-        x = x.view(-1, int(269568/32))
+
+        x = functional.relu(self.batchnorm1( self.conv1(x) + torch.cat([self.padding1(x)]*4,1) ))
+        x = functional.relu(self.batchnorm2( self.conv2(x) + torch.cat([self.padding2(x)]*2,1) )) 
+        x = functional.relu(self.batchnorm3( self.conv3(x) + torch.cat([self.padding3(x)]*2,1) ))
+
+        x = functional.relu(self.batchnorm4( self.conv4(x) + torch.cat([self.padding4(self.pool(x))]*2,1) ))
+        x = functional.relu(self.batchnorm5( self.conv5(x) + torch.cat([self.pool(self.padding5(x))]*2,1) ))
+        x = functional.relu(self.batchnorm6( self.conv6(x) + torch.cat([self.padding6(self.pool(x))]*2,1) ))
+        x = functional.relu(self.batchnorm7( self.conv7(x) + self.padding7(self.pool(x)) ))
+
+        x = x.view(-1, int(96000/30))
         x = functional.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -82,7 +111,7 @@ def main(hp):
     testX, testY = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
     trainX, trainY = np.load('moreX.npy'), np.load('moreY.npy')
 
-    transform = transforms.Compose([transforms.ToPILImage(), transforms.TenCrop(150), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.ToTensor()])
 
     # trainset = CellDataset(X[hp['num_test_images']:,:,:], Y[hp['num_test_images']:], transform)
     trainset = CellDataset(trainX, trainY, transform)
@@ -153,6 +182,7 @@ def test(hp):
     testX, testY = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
     realTestX = np.expand_dims(np.load('X_test.npy'), 3)
     transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.ToTensor()])
+    # transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.ToTensor()])
 
     # testset = CellDataset(X[:hp['num_test_images'],:,:,:], Y[:hp['num_test_images']], transform)
     testset = CellTestDataset(testX, testY, transform)
