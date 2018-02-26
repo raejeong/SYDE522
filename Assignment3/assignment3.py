@@ -185,13 +185,13 @@ def test(hp):
     # transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.ToTensor()])
 
     # testset = CellDataset(X[:hp['num_test_images'],:,:,:], Y[:hp['num_test_images']], transform)
-    testset = CellTestDataset(testX, testY, transform)
+    testset = CellTestDataset(testX[:100,:,:,:], testY[:100], transform)
     testset_loader = DataLoader(testset, batch_size=hp['batch_size'], shuffle=True)
     realTestset = CellTestDataset(realTestX, transform=transform)
     real_testset_loader = DataLoader(realTestset, batch_size=hp['batch_size'], shuffle=False)
 
     net = Net()
-    net.cuda()
+    # net.cuda()
     net.load_state_dict(torch.load("model.pt"))
     dtype = torch.cuda.FloatTensor
 
@@ -201,12 +201,12 @@ def test(hp):
     for i, data in enumerate(testset_loader):
         inputs, labels = data['image'], data['label']
         
-        labels = Variable(labels).type(torch.cuda.LongTensor)
+        labels = Variable(labels)#.type(torch.cuda.LongTensor)
 
         outputs = []
         for image in inputs:
             # wrap them in Variable
-            image = Variable(image).type(dtype)
+            image = Variable(image)#.type(dtype)
             # forward + backward + optimize
             outputs.append(net(image))
 
@@ -225,7 +225,7 @@ def test(hp):
         outputs = []
         for image in inputs:
             # wrap them in Variable
-            image = Variable(image).type(dtype)
+            image = Variable(image)#.type(dtype)
             # forward + backward + optimize
             outputs.append(net(image))
         outputs = torch.mean(torch.stack(outputs),0) 
@@ -249,5 +249,5 @@ if __name__ == "__main__":
         "learning_rate":0.0001,
         "print_every":10,
     }
-    # test(hyperparameters)
-    main(hyperparameters)
+    test(hyperparameters)
+    # main(hyperparameters)
