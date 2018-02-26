@@ -24,23 +24,32 @@ class CellDataset(Dataset):
         sample = {'image': self.X[idx,:,:,:], 'label': self.Y[idx]}
         
         if self.transform:
+            pdb.set_trace()
             sample['image'] = self.transform(sample['image'])
 
         return sample
 
 class CellTestDataset(Dataset):
-    def __init__(self, X, transform=None):
+    def __init__(self, X, Y=None, transform=None):
         self.X = X
+        self.Y = Y
         self.transform = transform
 
     def __len__(self):
         return self.X.shape[0]
 
     def __getitem__(self, idx): 
-        sample = {'image': self.X[idx,:,:,:]}
+        sample = {'image': []}
+        
+        for i in range(15):
+            sample['image'].append(self.X[idx,:,:,:])
+
+        if self.Y is not None:
+            sample['label'] = self.Y[idx]
         
         if self.transform:
-            sample['image'] = self.transform(sample['image'])
+            for i in range(15):
+                sample['image'][i] = self.transform(sample['image'][i])
 
         return sample
 
@@ -58,15 +67,11 @@ class Net(nn.Module):
         self.batchnorm4 = nn.BatchNorm2d(30)
         self.fc1 = nn.Linear(int(269568/32), 64)
         self.fc2 = nn.Linear(64, 20)
-        self.dropout = nn.Dropout3d(p=0.05)
 
     def forward(self, x):
         x = functional.relu(self.batchnorm1(self.pool(torch.cat((self.conv1(x),x),1))))
-        x = self.dropout(x)
         x = functional.relu(self.batchnorm2(self.pool(torch.cat((self.conv2(x),x),1))))
-        x = self.dropout(x)
         x = functional.relu(self.batchnorm3(self.pool(torch.cat((self.conv3(x),x),1))))
-        x = self.dropout(x)
         x = x.view(-1, int(269568/32))
         x = functional.relu(self.fc1(x))
         x = self.fc2(x)
@@ -77,7 +82,7 @@ def main(hp):
     testX, testY = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
     trainX, trainY = np.load('moreX.npy'), np.load('moreY.npy')
 
-    transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.ToTensor()])
+    transform = transforms.Compose([transforms.ToPILImage(), transforms.TenCrop(150), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
     # trainset = CellDataset(X[hp['num_test_images']:,:,:], Y[hp['num_test_images']:], transform)
     trainset = CellDataset(trainX, trainY, transform)
@@ -150,9 +155,9 @@ def test(hp):
     transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.ToTensor()])
 
     # testset = CellDataset(X[:hp['num_test_images'],:,:,:], Y[:hp['num_test_images']], transform)
-    testset = CellDataset(testX, testY, transform)
+    testset = CellTestDataset(testX, testY, transform)
     testset_loader = DataLoader(testset, batch_size=hp['batch_size'], shuffle=True)
-    realTestset = CellTestDataset(realTestX, transform)
+    realTestset = CellTestDataset(realTestX, transform=transform)
     real_testset_loader = DataLoader(realTestset, batch_size=hp['batch_size'], shuffle=False)
 
     net = Net()
@@ -165,11 +170,17 @@ def test(hp):
     output_data = {"Class":[]}
     for i, data in enumerate(testset_loader):
         inputs, labels = data['image'], data['label']
-        # wrap them in Variable
-        inputs, labels = Variable(inputs).type(dtype), Variable(labels).type(torch.cuda.LongTensor)
+        
+        labels = Variable(labels).type(torch.cuda.LongTensor)
 
-        # forward + backward + optimize
-        outputs = net(inputs)
+        outputs = []
+        for image in inputs:
+            # wrap them in Variable
+            image = Variable(image).type(dtype)
+            # forward + backward + optimize
+            outputs.append(net(image))
+
+        outputs = torch.mean(torch.stack(outputs),0) 
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
         correct += torch.eq(predicted, labels.data).sum()
@@ -180,11 +191,14 @@ def test(hp):
     total = 0
     for i, data in enumerate(real_testset_loader):
         inputs = data['image']
-        # wrap them in Variable
-        inputs= Variable(inputs).type(dtype)
-
-        # forward + backward + optimize
-        outputs = net(inputs)
+        
+        outputs = []
+        for image in inputs:
+            # wrap them in Variable
+            image = Variable(image).type(dtype)
+            # forward + backward + optimize
+            outputs.append(net(image))
+        outputs = torch.mean(torch.stack(outputs),0) 
         _, predicted = torch.max(outputs.data, 1)
         for j in range(predicted.size(0)):
             output_data['Class'].append(int(predicted[j]))
@@ -200,10 +214,10 @@ def test(hp):
 if __name__ == "__main__":
     hyperparameters = {
         "num_epoch":200,
-        "batch_size":32,
+        "batch_size":30,
         "num_test_images":100,
         "learning_rate":0.0001,
         "print_every":10,
     }
-    test(hyperparameters)
-    # main(hyperparameters)
+    # test(hyperparameters)
+    main(hyperparameters)
