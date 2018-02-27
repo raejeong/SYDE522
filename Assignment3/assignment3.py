@@ -40,14 +40,14 @@ class CellTestDataset(Dataset):
     def __getitem__(self, idx): 
         sample = {'image': []}
         
-        for i in range(15):
+        for i in range(25):
             sample['image'].append(self.X[idx,:,:,:])
 
         if self.Y is not None:
             sample['label'] = self.Y[idx]
         
         if self.transform:
-            for i in range(15):
+            for i in range(25):
                 sample['image'][i] = self.transform(sample['image'][i])
 
         return sample
@@ -181,7 +181,7 @@ def test(hp):
     # X, Y = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
     testX, testY = np.expand_dims(np.load('X.npy'), 3), np.load('Y.npy')
     realTestX = np.expand_dims(np.load('X_test.npy'), 3)
-    transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.ToTensor()])
+    transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.ToTensor()])
     # transform = transforms.Compose([transforms.ToPILImage(), transforms.RandomCrop(150), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip(), transforms.ToTensor()])
 
     # testset = CellDataset(X[:hp['num_test_images'],:,:,:], Y[:hp['num_test_images']], transform)
